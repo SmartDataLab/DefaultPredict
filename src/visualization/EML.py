@@ -11,6 +11,7 @@ from sklearn.metrics import roc_curve, roc_auc_score, auc
 import itertools
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import cross_val_score
+from xgboost import plot_importance
 
 
 def pca_selecting(train_feature, train_label, test_feature, test_label):
@@ -271,4 +272,11 @@ def plot_ks_curve(y, prob_y, save_path):
     plt.title("KS_CUR (KS=%0.2f) train data" % KS)
     plt.legend(loc="lower right")
     plt.savefig(save_path)  # "figure/KS_CUR_train.png"
+    plt.close(figure)
+
+
+def draw_xg_feature_importance(model, save_path):
+    figure = plt.gcf()
+    plot_importance(model)
+    plt.savefig(save_path, figsize=(50, 40), dpi=1000)
     plt.close(figure)

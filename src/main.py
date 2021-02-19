@@ -6,6 +6,7 @@ from tqdm import tqdm
 import json
 from importlib import reload
 
+# TODO(sujinhua): warning RuntimeWarning: invalid value encountered in true_divide
 from collections import Counter
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -16,6 +17,8 @@ from sklearn.metrics import r2_score
 from sklearn.metrics import roc_curve, roc_auc_score, auc
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import Normalizer
+from logitboost import LogitBoost
+from xgboost import XGBClassifier
 
 from preprocess.transform import (
     get_total_data,
@@ -46,6 +49,7 @@ from visualization.EML import (
     draw_pca_feature_selecting,
     draw_iv_feature_importance,
     plot_evaluation,
+    draw_xg_feature_importance,
 )
 from feature.engine import pca_feature, lasso_feature, iv_feature
 from feature.valid import feature_select_valid_model, evaluate
@@ -205,36 +209,13 @@ for column, intervals in tqdm(interval_dict.items()):
     except Exception as e:
         print(column, e)
         except_count += 1
-except_count
+print(except_count)
 #%%
-
-#%%
-# from importlib import reload
-# from preprocess import transform
-# reload(transform)
-# train_feature, test_feature = transform.get_norm_feature(train_feature.drop(['contacts_gray_score_most_familiar_all','user_blacklist_blacklist_category','user_blacklist_blacklist_details', 'consumer_label_phone_with_other_idcards'], axis=1),test_feature.drop('contacts_gray_score_most_familiar_all', axis=1))
 train_feature, test_feature = get_norm_feature(train_feature, test_feature)
-#%%
-# test_feature = test_feature.drop(['user_blacklist_blacklist_category','user_blacklist_blacklist_details', 'consumer_label_phone_with_other_idcards'], axis=1)
-# df = df.drop(['OVERDUECORP'], axis=1)
-# train_feature = train_feature.drop(['OVERDUECORP'], axis=1)
-# test_feature= test_feature.drop(['OVERDUECORP'], axis=1)
 #%%
 # feature selection
 # 1. draw feature importance during feature selection
 # 2. get prepared for training data from pca, lasso and iv
-
-# nan_count_dict = {
-#     column: np.sum(np.isnan(df[column])) for column in test_feature.columns
-# }
-# nan_column_list = [key for key, value in nan_count_dict.items() if value > 0]
-# %%
-# from visualization import EML
-# from preprocess import transform
-# from importlib import reload
-# reload(EML)
-# reload(transform)
-# from sklearn.decomposition import PCA
 pca_selector = pca_selecting(
     train_feature,
     train_label,
@@ -242,13 +223,6 @@ pca_selector = pca_selecting(
     test_label,
 )
 
-#%%
-# from preprocess import transform
-# from importlib import reload
-# reload(EML)
-# reload(transform)
-# from sklearn.decomposition import PCA
-# PCA(20).fit(transform.fill_nan_mean(df, df.columns))
 #%%
 draw_pca_feature_selecting(
     pca_selector, save_path="../figure/pca_feature_selecting.png"
@@ -267,11 +241,13 @@ pca_train, pca_test, _ = pca_feature(train_feature, test_feature, n_components=2
 draw_density_plot(
     pca_train, pca_train.columns, save_path="../figure/density.png", xlim=[-2, 2]
 )
+json.dump(list(pca_train.columns), open("../data/feature_columns(PCA).json", "w"))
 
 #%%
 lasso_train, lasso_test, lasso = lasso_feature(
     train_feature, test_feature, train_label, alpha=0.007
 )
+json.dump(list(lasso_train.columns), open("../data/feature_columns(LASSO).json", "w"))
 #%%
 
 iv_train, iv_test, iv_feature, iv_dict = iv_feature(
@@ -283,6 +259,7 @@ iv_train, iv_test, iv_feature, iv_dict = iv_feature(
     n_feature=20,
 )
 draw_iv_feature_importance(iv_dict, save_path="../figure/iv_feature_importance.png")
+json.dump(list(iv_train.columns), open("../data/feature_columns(IV).json", "w"))
 #%%
 # contrast plot before and after deleting the highly-correlate variables
 raw_iv_feature = sorted(
@@ -302,7 +279,7 @@ draw_corr_heat_map(
 # 1. test the above and need to adjust the lasso so that it will excess the iv method
 # 2. add more model like xgboost
 # 3. save all the needed results
-
+# previous best feature by iv method ↓
 # key_feature = [
 #     "contacts_number_statistic_pct_black_ratio",
 #     "contacts_number_statistic_pct_cnt_to_black",
@@ -452,10 +429,6 @@ rf_evaluation = evaluate(
 plot_evaluation(label_test_balance, rf_pred, "../figure", method="RF")
 
 #%%
-# TODO(sujinhua): then save all the results,
-
-from xgboost import XGBClassifier
-from xgboost import plot_importance
 
 xg = XGBClassifier(
     learning_rate=0.01,
@@ -474,7 +447,11 @@ xg_pred = xg.predict_proba(feature_test_balance)[:, 1]
 xg_evaluation = evaluate(label_test_balance, xg_pred)
 plot_evaluation(label_test_balance, xg_pred, "../figure", method="XG")
 
-
+lb = LogitBoost(n_estimators=200, random_state=0)  # base_estimator=LogisticRegression()
+lb.fit(feature_train_balance, label_train_balance)
+lb_pred = lb.predict_proba(feature_test_balance)[:, 1]
+lb_evaluation = evaluate(label_test_balance, lb_pred)
+plot_evaluation(label_test_balance, lb_pred, "../figure", method="LB")
 #%%
 # Auto-tunan_column_listne model for pandemic
 # 1. XGboost
@@ -508,14 +485,12 @@ draw_boxplot(train_feature_2019, test_feature_2020, "../figure/箱线对比图.p
 best_model.fit(train_feature_2019, train_label_2019)
 xg_2020_pred = best_model.predict_proba(test_feature_2020)[:, 1]
 xg_2020_evaluation = evaluate(
-    label_test_balance, xg_2020_pred, save_path="../data/xg(2020)_evaluation.json"
+    test_label_2020, xg_2020_pred, save_path="../data/xg(2020)_evaluation.json"
 )
 plot_evaluation(test_label_2020, xg_2020_pred, "../figure", method="XG_2020")
 
 #%%
-from models import LogisticVariants
 
-reload(LogisticVariants)
 glimse_index = list(
     np.random.choice(list(test_feature_2020.index), 1000, replace=False)
 )
@@ -523,18 +498,16 @@ test_index = list(set(test_feature_2020.index) - set(glimse_index))
 
 # test p-values
 lr_base = LogisticRegression(C=1e30).fit(train_feature_2019, train_label_2019)
-tf = LogisticVariants.TransferLogistic(lr_base)
+tf = TransferLogistic(lr_base)
 tf.fit(test_feature_2020.loc[glimse_index, :], test_label_2020[glimse_index])
-tf_pred = tf.predict_proba(test_feature_2020.loc[test_index, :])[:, 1]
-# xg_2020_pred = best_model.predict_proba(test_feature_2020)[:, 1]
-# xg_2020_evaluation = evaluate(label_test_balance, xg_2020_pred)
-# plot_evaluation(test_label_2020, xg_2020_pred, "../figure", method="XG_2020")
+tf_2020_pred = tf.predict_proba(test_feature_2020.loc[test_index, :])[:, 1]
+tf_2020_evaluation = evaluate(
+    test_label_2020, tf_2020_pred, save_path="../data/tf(2020)_evaluation.json"
+)
+plot_evaluation(test_label_2020, tf_2020_pred, "../figure", method="TF_2020")
 
-# TODO(sujinhua): evluate performance except addtive logistic
-
+# TODO(sujinhua): add XGboost - additive learning
 #%%
-from visualization.EDA import draw_pandemic_contrast
-from logitboost import LogitBoost
 
 draw_pandemic_contrast(
     best_model,
@@ -543,8 +516,7 @@ draw_pandemic_contrast(
     test_feature_2020.loc[test_index, :],
     "../figure/all_year_proba_curve.png",
 )
-# %%
 
-# %%
+#%%
 
-# %%
+draw_xg_feature_importance(xg, save_path="../figure/feature_importance(xgboost).png")

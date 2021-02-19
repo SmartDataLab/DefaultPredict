@@ -36,13 +36,14 @@ def iv_feature(
     cr_threshold,
     n_feature=None,
 ):
+    except_columns = []
     iv_dict = {}
     for column in tqdm(train_feature.columns):
         iv, IV, WOE, N_0_group, N_1_group = CalcIV(train_feature[column], train_label)
         try:
             intervals = interval_dict[column]
         except:
-            print("there is a column(%s) not in interval_dict " % column)
+            except_columns.append(column)
             intervals = np.unique(train_feature[column])
 
         iv_dict[column] = {"iv": iv}
@@ -56,6 +57,9 @@ def iv_feature(
                 "WOE": WOE[i],
                 "IV": IV[i],
             }
+
+    print("there is %s columns not in interval_dict " % len(except_columns))
+    print(except_columns)
     # there must be some calculation for this xxxx
     pd.DataFrame(iv_dict[column]).to_csv("../data/Bins/%s.csv" % column)
     iv_df = pd.DataFrame(
