@@ -1,12 +1,13 @@
 #%%
 import numpy as np
+
+np.seterr(divide="ignore", invalid="ignore")
 import pandas as pd
 from path import Path
 from tqdm import tqdm
 import json
 from importlib import reload
 
-# TODO(sujinhua): warning RuntimeWarning: invalid value encountered in true_divide
 from collections import Counter
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier
@@ -429,7 +430,10 @@ rf_evaluation = evaluate(
 plot_evaluation(label_test_balance, rf_pred, "../figure", method="RF")
 
 #%%
+from feature import valid
 
+# TODO(sujinhua): remove the valid
+reload(valid)
 xg = XGBClassifier(
     learning_rate=0.01,
     n_estimators=10,  # 树的个数-10棵树建立xgboost
@@ -444,13 +448,18 @@ xg = XGBClassifier(
 )
 xg.fit(feature_train_balance, label_train_balance)
 xg_pred = xg.predict_proba(feature_test_balance)[:, 1]
-xg_evaluation = evaluate(label_test_balance, xg_pred)
+xg_evaluation = valid.evaluate(
+    label_test_balance, xg_pred, save_path="../data/xg_evaluation.json"
+)
 plot_evaluation(label_test_balance, xg_pred, "../figure", method="XG")
+#%%
 
 lb = LogitBoost(n_estimators=200, random_state=0)  # base_estimator=LogisticRegression()
 lb.fit(feature_train_balance, label_train_balance)
 lb_pred = lb.predict_proba(feature_test_balance)[:, 1]
-lb_evaluation = evaluate(label_test_balance, lb_pred)
+lb_evaluation = evaluate(
+    label_test_balance, lb_pred, save_path="../data/lb_evaluation.json"
+)
 plot_evaluation(label_test_balance, lb_pred, "../figure", method="LB")
 #%%
 # Auto-tunan_column_listne model for pandemic
@@ -462,6 +471,7 @@ plot_evaluation(label_test_balance, lb_pred, "../figure", method="LB")
 from preprocess import transform
 
 reload(transform)
+params = {"objective": "reg:linear", "verbose": False}
 best_model = XGBClassifier(
     learning_rate=0.01,
     n_estimators=10,  # 树的个数-10棵树建立xgboost
@@ -484,17 +494,42 @@ best_model = XGBClassifier(
 draw_boxplot(train_feature_2019, test_feature_2020, "../figure/箱线对比图.png")
 best_model.fit(train_feature_2019, train_label_2019)
 xg_2020_pred = best_model.predict_proba(test_feature_2020)[:, 1]
-xg_2020_evaluation = evaluate(
+xg_2020_evaluation = valid.evaluate(
     test_label_2020, xg_2020_pred, save_path="../data/xg(2020)_evaluation.json"
 )
 plot_evaluation(test_label_2020, xg_2020_pred, "../figure", method="XG_2020")
 
 #%%
+# additive learning for xgboost
+import xgboost as xgb
 
 glimse_index = list(
     np.random.choice(list(test_feature_2020.index), 1000, replace=False)
 )
 test_index = list(set(test_feature_2020.index) - set(glimse_index))
+params = best_model.get_xgb_params()
+xg_2020_train = xgb.DMatrix(
+    test_feature_2020.loc[glimse_index, :], label=test_label_2020[glimse_index]
+)
+xg_2020_test = xgb.DMatrix(
+    test_feature_2020.loc[test_index, :], label=test_label_2020[test_index]
+)
+best_model.save_model("../data/xg_2019.model")
+additive_xg = xgb.train(params, xg_2020_train, 5, xgb_model="../data/xg_2019.model")
+additive_xg_pred = additive_xg.predict(xg_2020_test)
+additive_xg_evaluation = valid.evaluate(
+    test_label_2020[test_index],
+    additive_xg_pred,
+    save_path="../data/additive_xg(2020)_evaluation.json",
+)
+plot_evaluation(
+    test_label_2020[test_index],
+    additive_xg_pred,
+    "../figure",
+    method="additive_XG_2020",
+)
+#%%
+
 
 # test p-values
 lr_base = LogisticRegression(C=1e30).fit(train_feature_2019, train_label_2019)
@@ -502,9 +537,13 @@ tf = TransferLogistic(lr_base)
 tf.fit(test_feature_2020.loc[glimse_index, :], test_label_2020[glimse_index])
 tf_2020_pred = tf.predict_proba(test_feature_2020.loc[test_index, :])[:, 1]
 tf_2020_evaluation = evaluate(
-    test_label_2020, tf_2020_pred, save_path="../data/tf(2020)_evaluation.json"
+    test_label_2020[test_index],
+    tf_2020_pred,
+    save_path="../data/tf(2020)_evaluation.json",
 )
-plot_evaluation(test_label_2020, tf_2020_pred, "../figure", method="TF_2020")
+plot_evaluation(
+    test_label_2020[test_index], tf_2020_pred, "../figure", method="TF_2020"
+)
 
 # TODO(sujinhua): add XGboost - additive learning
 #%%
@@ -520,3 +559,4 @@ draw_pandemic_contrast(
 #%%
 
 draw_xg_feature_importance(xg, save_path="../figure/feature_importance(xgboost).png")
+# %%

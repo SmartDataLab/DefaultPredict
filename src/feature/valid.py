@@ -31,7 +31,13 @@ def evaluate(test_label, test_pred, threshold=0.5, save_path=None):
     R2 = r2_score(test_label, test_pred)
     auc = roc_auc_score(test_label, test_pred)
     cm = confusion_matrix(test_label, test_pred > threshold).tolist()
-    res = {"MSE": mse, "er": er, "R2": R2, "AUC": auc, "CM": cm}
+    res = {
+        "MSE": float(mse),
+        "er": float(er),
+        "R2": float(R2),
+        "AUC": float(auc),
+        "CM": cm,
+    }
     if save_path:
         json.dump(res, open(save_path, "w"))
     return res
