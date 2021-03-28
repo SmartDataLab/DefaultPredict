@@ -26,17 +26,17 @@ def feature_select_valid_model():
 
 
 def evaluate(test_label, test_pred, threshold=0.5, save_path=None):
-    mse = mean_squared_error(test_label, test_pred)
-    er = 1 - precision_score(test_label, test_pred > threshold)
     R2 = r2_score(test_label, test_pred)
     auc = roc_auc_score(test_label, test_pred)
     cm = confusion_matrix(test_label, test_pred > threshold).tolist()
+    tp = cm[1][1]
+    fp = cm[0][1]
     res = {
-        "MSE": float(mse),
-        "er": float(er),
         "R2": float(R2),
         "AUC": float(auc),
         "CM": cm,
+        "TPR": tp / (tp + fp),
+        "FPR": fp / (tp + fp),
     }
     if save_path:
         json.dump(res, open(save_path, "w"))

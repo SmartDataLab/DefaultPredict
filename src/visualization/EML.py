@@ -54,11 +54,13 @@ def lasso_selecting(train_feature, train_label, alpha_base):
             for i, column in enumerate(train_feature.columns)
             if model_lasso.coef_[i] != 0.0
         ]
+        corr_df = train_feature[[tuple_[0] for tuple_ in non_zero_feature]].corr()
         yield {
             "model": model_lasso,
             "alpha": model_lasso.alpha_,
             "features": non_zero_feature,
             "rmse": rmse_cv(model_lasso, train_feature, train_label).mean(),
+            "corr_df": corr_df,
         }
 
 
@@ -66,12 +68,10 @@ def draw_pca_feature_selecting(pca_iterator, save_path):
     figure = plt.figure()
     n_components_list = []
     auc_list = []
-    er_list = []
     evr_list = []
     for one in pca_iterator:
         n_components_list.append(one["n_components"])
         auc_list.append(one["score"]["AUC"])
-        er_list.append(one["score"]["er"])
         evr_list.append(np.sum(one["evr"]))
     plt.plot(
         n_components_list,
@@ -79,13 +79,9 @@ def draw_pca_feature_selecting(pca_iterator, save_path):
     )
     plt.plot(
         n_components_list,
-        er_list,
-    )
-    plt.plot(
-        n_components_list,
         evr_list,
     )
-    plt.legend(("AUC", "Error Rate", "Explained Variance Ratio"), loc="upper right")
+    plt.legend(("AUC", "Explained Variance Ratio"), loc="upper right")
     plt.title("pca selecting precedure")
     plt.xlabel("n_components")
     plt.savefig(save_path)
@@ -97,20 +93,25 @@ def draw_lasso_feature_selecting(lasso_iterator, save_path):
     n_feature_list = []
     alpha_list = []
     rmse_list = []
+    corr_list = []
     for one in lasso_iterator:
         rmse_list.append(one["rmse"])
         alpha_list.append(one["alpha"])
+        corr_list.append(one["corr_df"].mean())
         n_feature_list.append(len(one["features"]))
-    plt.plot(
+    ax1 = figure.add_subplot(111)
+    ax1.plot(
         alpha_list,
         n_feature_list,
     )
-    plt.plot(
-        alpha_list,
-        rmse_list,
-    )
-    plt.legend(("n_feature", "RMSE"), loc="upper right")
-    plt.title("lasso selecting precedure")
+    ax1.set_ylabel("n_feature")
+    ax1.title("lasso selecting precedure")
+    ax2 = ax1.twinx()  # this is the important function
+    ax2.plot(alpha_list, rmse_list, "r")
+    ax2.plot(alpha_list, corr_list, "g")
+    ax2.set_ylabel("RMSE")
+    ax2.set_xlabel("Same")
+    plt.legend(("n_feature", "RMSE", "Corr"), loc="upper right")
     plt.xlabel("alpha")
     plt.savefig(save_path)
     plt.close(figure)

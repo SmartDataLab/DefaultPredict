@@ -225,14 +225,20 @@ pca_selector = pca_selecting(
 )
 
 #%%
-draw_pca_feature_selecting(
+from visualization import EML
+
+reload(EML)
+
+EML.draw_pca_feature_selecting(
     pca_selector, save_path="../figure/pca_feature_selecting.png"
 )
 #%%
-lasso_selector = lasso_selecting(train_feature, train_label, alpha_base=0.001)
+from visualization import EML
 
+reload(EML)
+lasso_selector = EML.lasso_selecting(train_feature, train_label, alpha_base=0.001)
 
-draw_lasso_feature_selecting(
+EML.draw_lasso_feature_selecting(
     lasso_selector, save_path="../figure/lasso_feature_selecting.png"
 )
 #%%
@@ -462,6 +468,9 @@ lb_evaluation = evaluate(
 )
 plot_evaluation(label_test_balance, lb_pred, "../figure", method="LB")
 #%%
+from feature import valid
+
+#%%
 # Auto-tunan_column_listne model for pandemic
 # 1. XGboost
 # 2. XGboost - additive learning
@@ -559,4 +568,44 @@ draw_pandemic_contrast(
 #%%
 
 draw_xg_feature_importance(xg, save_path="../figure/feature_importance(xgboost).png")
+# %%
+
+# TODO: cluster
+from sklearn.cluster import KMeans
+import numpy as np
+from models.ClusterDividePredict import ClusterPredictor
+from models import ClusterDividePredict
+
+reload(ClusterDividePredict)
+ClusterPredictor = ClusterDividePredict.ClusterPredictor
+kmeans = KMeans(n_clusters=5, random_state=0)
+predict_models = [
+    LogisticRegression(
+        C=0.05,
+        class_weight=None,
+        dual=False,
+        fit_intercept=True,
+        intercept_scaling=1,
+        max_iter=100,
+        multi_class="ovr",
+        n_jobs=1,
+        penalty="l2",
+        random_state=None,
+        solver="liblinear",
+        tol=0.0001,
+        verbose=0,
+        warm_start=False,
+    )
+    for _ in range(5)
+]
+cluster_predictor = ClusterPredictor(kmeans, predict_models)
+cluster_predictor.fit(train_feature_2019, train_label_2019)
+cp_2020_pred = cluster_predictor.predict_proba(test_feature_2020)[:, 1]
+cp_2020_evaluation = evaluate(
+    test_label_2020,
+    cp_2020_pred,
+    save_path="../data/cp(2020)_evaluation.json",
+)
+plot_evaluation(test_label_2020, cp_2020_pred, "../figure", method="CP_2020")
+
 # %%
