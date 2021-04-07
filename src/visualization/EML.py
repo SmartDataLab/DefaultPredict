@@ -12,6 +12,7 @@ import itertools
 from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import cross_val_score
 from xgboost import plot_importance
+from sklearn.svm import l1_min_c
 
 
 def pca_selecting(train_feature, train_label, test_feature, test_label):
@@ -44,23 +45,34 @@ def rmse_cv(model, train_feature, train_label):
     return rmse
 
 
-def lasso_selecting(train_feature, train_label, alpha_base):
-    for alpha in tqdm(range(1, 11)):
-        model_lasso = LassoCV(alphas=[alpha * alpha_base]).fit(
-            train_feature, train_label
-        )
+def lasso_selecting(train_feature, train_label, test_feature, test_label, alpha_base):
+    cs = l1_min_c(train_feature, train_label, loss="log") * np.logspace(0, 7, 16)
+
+    print("Computing regularization path ...")
+    model_lasso = LogisticRegression(
+        penalty="l1",
+        solver="liblinear",
+        tol=1e-6,
+        max_iter=int(1e6),
+        warm_start=True,
+        intercept_scaling=10000.0,
+    )
+    for c in tqdm(cs):
+        model_lasso.set_params(C=c)
+        model_lasso.fit(train_feature, train_label)
         non_zero_feature = [
             (column, model_lasso.coef_[i])
             for i, column in enumerate(train_feature.columns)
-            if model_lasso.coef_[i] != 0.0
+            if model_lasso.coef_.ravel()[i] != 0.0
         ]
-        corr_df = train_feature[[tuple_[0] for tuple_ in non_zero_feature]].corr()
+        valid_pred = model_lasso.predict_proba(test_feature)[:, 1]
+        valid_evaluation = evaluate(test_label, valid_pred)
         yield {
             "model": model_lasso,
-            "alpha": model_lasso.alpha_,
+            "log(C)": np.log10(cs),
             "features": non_zero_feature,
-            "rmse": rmse_cv(model_lasso, train_feature, train_label).mean(),
-            "corr_df": corr_df,
+            "score": valid_evaluation,
+            "coef": model_lasso.coef_.ravel(),
         }
 
 
@@ -82,7 +94,7 @@ def draw_pca_feature_selecting(pca_iterator, save_path):
         evr_list,
     )
     plt.legend(("AUC", "Explained Variance Ratio"), loc="upper right")
-    plt.title("pca selecting precedure")
+    plt.title("Computing regularization path")
     plt.xlabel("n_components")
     plt.savefig(save_path)
     plt.close(figure)
@@ -91,28 +103,28 @@ def draw_pca_feature_selecting(pca_iterator, save_path):
 def draw_lasso_feature_selecting(lasso_iterator, save_path):
     figure = plt.figure()
     n_feature_list = []
-    alpha_list = []
-    rmse_list = []
-    corr_list = []
+    logc_list = []
+    auc_list = []
+    ceof_list = []
     for one in lasso_iterator:
-        rmse_list.append(one["rmse"])
-        alpha_list.append(one["alpha"])
-        corr_list.append(one["corr_df"].mean())
+        auc_list.append(one["score"]["AUC"])
+        logc_list.append(one["log(C)"])
         n_feature_list.append(len(one["features"]))
+        ceof_list.append(one["coef"])
+
     ax1 = figure.add_subplot(111)
     ax1.plot(
-        alpha_list,
-        n_feature_list,
+        logc_list,
+        ceof_list,
     )
-    ax1.set_ylabel("n_feature")
-    ax1.title("lasso selecting precedure")
+    ax1.set_ylabel("ceof")
     ax2 = ax1.twinx()  # this is the important function
-    ax2.plot(alpha_list, rmse_list, "r")
-    ax2.plot(alpha_list, corr_list, "g")
-    ax2.set_ylabel("RMSE")
-    ax2.set_xlabel("Same")
-    plt.legend(("n_feature", "RMSE", "Corr"), loc="upper right")
-    plt.xlabel("alpha")
+    ax2.plot(logc_list, auc_list, "r")
+    ax2.set_ylabel("AUC")
+    ax2.set_xlabel("log(C)")
+    plt.legend(("AUC"), loc="upper right")
+    plt.xlabel("log(C)")
+    plt.title("lasso selecting precedure")
     plt.savefig(save_path)
     plt.close(figure)
 
@@ -128,6 +140,7 @@ def plot_evaluation(y, prob_y, save_path_folder, method="", mode=""):
     cm = confusion_matrix(y, prob_y > 0.5)
     plot_confusion_matrix(cm, "%s/%s:cm(0.5)_%s.png" % (save_path_folder, method, mode))
     plot_ks_curve(y, prob_y, "%s/%s:ks_%s.png" % (save_path_folder, method, mode))
+    plot_cost_curve(y, prob_y, "%s/%s:ks_%s.png" % (save_path_folder, method, mode))
     plot_confusing_matrix_change(
         y, prob_y, "%s/%s:cm_change_%s.png" % (save_path_folder, method, mode)
     )
@@ -242,6 +255,73 @@ def cal_KS(target, score):
     all["goodCumRate"] = all["good"].cumsum().to_numpy() / all["good"].sum()
     all["KS"] = all.apply(lambda x: x.badCumRate - x.goodCumRate, axis=1)
     return all[["badCumRate", "goodCumRate", "KS"]], all["KS"].max()
+
+
+def plot_cost_curve(y, prob_y, save_path, cost_fn=10, cost_fp=1):
+    figure = plt.figure()
+    # C(-|+) cost_fn
+    # <a scalar value>
+    # C(+|-) cost_fp
+    # <a scalar value>
+
+    # Ground truth
+    truth = y  # <a list of 0 (negative class) or 1 (positive class)>
+    # Predictions from a classifier
+    score = prob_y  # <a list of [0,1] class probabilities>
+
+    # %% OUTPUTS
+
+    # 1D-array of x-axis values (normalized PC)
+    pc = None
+    # list of lines as (slope, intercept)
+    lines = []
+    # lower envelope of the list of lines as a 1D-array of y-axis values (NEC)
+    lower_envelope = []
+    # area under the lower envelope (the smaller, the better)
+    area = None
+
+    # %% COMPUTATION
+
+    # points from the roc curve, because a point in the ROC space <=> a line in the cost space
+    roc_fpr, roc_tpr, _ = roc_curve(truth, score)
+
+    # compute the normalized p(+)*C(-|+)
+    thresholds = np.arange(0, 1.01, 0.01)
+    pc = (thresholds * cost_fn) / (thresholds * cost_fn + (1 - thresholds) * cost_fp)
+
+    # compute a line in the cost space for each point in the roc space
+    for fpr, tpr in zip(roc_fpr, roc_tpr):
+        slope = 1 - tpr - fpr
+        intercept = fpr
+        lines.append((slope, intercept))
+
+    # compute the lower envelope
+    for x_value in pc:
+        y_value = min([slope * x_value + intercept for slope, intercept in lines])
+        lower_envelope.append(max(0, y_value))
+    lower_envelope = np.array(lower_envelope)
+
+    # compute the area under the lower envelope using the composite trapezoidal rule
+    area = np.trapz(lower_envelope, pc)
+
+    # %% EXAMPLE OF PLOT
+
+    # display each line as a thin dashed line
+    for slope, intercept in lines:
+        plt.plot(pc, slope * pc + intercept, color="grey", lw=1, linestyle="--")
+
+    # display the lower envelope as a thicker black line
+    plt.plot(pc, lower_envelope, color="black", lw=3, label="area={:.3f}".format(area))
+
+    # plot parameters
+    plt.xlim([0.0, 1.0])
+    plt.ylim([0.0, 1.05 * max(lower_envelope)])
+    plt.xlabel("Probability Cost Function")
+    plt.ylabel("Normalized Expected Cost")
+    plt.title("Cost curve")
+    plt.legend(loc="lower right")
+    plt.savefig(save_path)
+    plt.close(figure)
 
 
 def plot_ks_curve(y, prob_y, save_path):

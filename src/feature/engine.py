@@ -1,7 +1,14 @@
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
-from sklearn.linear_model import Ridge, RidgeCV, ElasticNet, LassoCV, LassoLarsCV
+from sklearn.linear_model import (
+    Ridge,
+    RidgeCV,
+    ElasticNet,
+    LassoCV,
+    LassoLarsCV,
+    LogisticRegression,
+)
 from sklearn.model_selection import cross_val_score
 from tqdm import tqdm
 
@@ -20,9 +27,16 @@ def pca_feature(train_feature, test_feature, n_components):
     return train_feature_, test_feature_, pca
 
 
-def lasso_feature(train_feature, test_feature, train_label, alpha):
-    model_lasso = LassoCV(alphas=[alpha]).fit(train_feature, train_label)
-
+def lasso_feature(train_feature, test_feature, train_label, C):
+    model_lasso = LogisticRegression(
+        penalty="l1",
+        solver="liblinear",
+        tol=1e-6,
+        max_iter=int(1e6),
+        warm_start=True,
+        intercept_scaling=10000.0,
+        C=C,
+    )
     coef = pd.Series(np.abs(model_lasso.coef_), index=train_feature.columns)
     feature_columns = list(coef[coef != 0].index)
     return train_feature[feature_columns], test_feature[feature_columns], model_lasso

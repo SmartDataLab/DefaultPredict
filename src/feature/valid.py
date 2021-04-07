@@ -35,8 +35,8 @@ def evaluate(test_label, test_pred, threshold=0.5, save_path=None):
         "R2": float(R2),
         "AUC": float(auc),
         "CM": cm,
-        "TPR": tp / (tp + fp),
-        "FPR": fp / (tp + fp),
+        "TPR": tp / (tp + fp + 0.1),
+        "FPR": fp / (tp + fp + 0.1),
     }
     if save_path:
         json.dump(res, open(save_path, "w"))
