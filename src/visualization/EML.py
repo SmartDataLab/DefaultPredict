@@ -46,7 +46,7 @@ def rmse_cv(model, train_feature, train_label):
 
 
 def lasso_selecting(train_feature, train_label, test_feature, test_label, alpha_base):
-    cs = l1_min_c(train_feature, train_label, loss="log") * np.logspace(0, 7, 16)
+    cs = l1_min_c(train_feature, train_label, loss="log") * np.logspace(0, 3, 10)
 
     print("Computing regularization path ...")
     model_lasso = LogisticRegression(
@@ -60,10 +60,11 @@ def lasso_selecting(train_feature, train_label, test_feature, test_label, alpha_
     for c in tqdm(cs):
         model_lasso.set_params(C=c)
         model_lasso.fit(train_feature, train_label)
+        coef = model_lasso.coef_.ravel().copy()
         non_zero_feature = [
-            (column, model_lasso.coef_[i])
+            (column, coef[i])
             for i, column in enumerate(train_feature.columns)
-            if model_lasso.coef_.ravel()[i] != 0.0
+            if coef[i] != 0.0
         ]
         valid_pred = model_lasso.predict_proba(test_feature)[:, 1]
         valid_evaluation = evaluate(test_label, valid_pred)
@@ -72,7 +73,7 @@ def lasso_selecting(train_feature, train_label, test_feature, test_label, alpha_
             "log(C)": np.log10(cs),
             "features": non_zero_feature,
             "score": valid_evaluation,
-            "coef": model_lasso.coef_.ravel(),
+            "coef": coef,
         }
 
 
@@ -105,17 +106,18 @@ def draw_lasso_feature_selecting(lasso_iterator, save_path):
     n_feature_list = []
     logc_list = []
     auc_list = []
-    ceof_list = []
+    coef_list = []
     for one in lasso_iterator:
         auc_list.append(one["score"]["AUC"])
         logc_list.append(one["log(C)"])
         n_feature_list.append(len(one["features"]))
-        ceof_list.append(one["coef"])
+        coef_list.append(one["coef"])
 
+    coef_list = np.array(coef_list)
     ax1 = figure.add_subplot(111)
     ax1.plot(
         logc_list,
-        ceof_list,
+        coef_list,
     )
     ax1.set_ylabel("ceof")
     ax2 = ax1.twinx()  # this is the important function
