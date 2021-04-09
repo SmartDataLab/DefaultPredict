@@ -19,7 +19,7 @@ class CascadePredictor(object):
             certain_inner_idxs = [
                 remain_idxs[k]
                 for k, one in enumerate(prob_tmp)
-                if self.certain_fun(one)
+                if self.certain_fun(one[1])
             ]
             for j, idx in enumerate(certain_inner_idxs):
                 prob[idx] = prob_tmp[j]

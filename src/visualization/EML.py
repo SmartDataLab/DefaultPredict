@@ -70,7 +70,7 @@ def lasso_selecting(train_feature, train_label, test_feature, test_label, alpha_
         valid_evaluation = evaluate(test_label, valid_pred)
         yield {
             "model": model_lasso,
-            "log(C)": np.log10(cs),
+            "log(C)": np.log10(c),
             "features": non_zero_feature,
             "score": valid_evaluation,
             "coef": coef,
@@ -113,15 +113,14 @@ def draw_lasso_feature_selecting(lasso_iterator, save_path):
         n_feature_list.append(len(one["features"]))
         coef_list.append(one["coef"])
 
-    coef_list = np.array(coef_list)
     ax1 = figure.add_subplot(111)
     ax1.plot(
-        logc_list,
-        coef_list,
+        np.array(logc_list),
+        np.array(coef_list)
     )
     ax1.set_ylabel("ceof")
     ax2 = ax1.twinx()  # this is the important function
-    ax2.plot(logc_list, auc_list, "r")
+    ax2.plot(np.array(logc_list), np.array(auc_list), "r")
     ax2.set_ylabel("AUC")
     ax2.set_xlabel("log(C)")
     plt.legend(("AUC"), loc="upper right")
@@ -142,7 +141,7 @@ def plot_evaluation(y, prob_y, save_path_folder, method="", mode=""):
     cm = confusion_matrix(y, prob_y > 0.5)
     plot_confusion_matrix(cm, "%s/%s:cm(0.5)_%s.png" % (save_path_folder, method, mode))
     plot_ks_curve(y, prob_y, "%s/%s:ks_%s.png" % (save_path_folder, method, mode))
-    plot_cost_curve(y, prob_y, "%s/%s:ks_%s.png" % (save_path_folder, method, mode))
+    plot_cost_curve(y, prob_y, "%s/%s:cost_curve_%s.png" % (save_path_folder, method, mode))
     plot_confusing_matrix_change(
         y, prob_y, "%s/%s:cm_change_%s.png" % (save_path_folder, method, mode)
     )

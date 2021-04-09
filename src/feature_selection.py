@@ -262,7 +262,7 @@ json.dump(list(pca_train.columns), open("../data/feature_columns(PCA).json", "w"
 
 #%%
 lasso_train, lasso_test, lasso = lasso_feature(
-    train_feature, test_feature, train_label, C=1e3
+    train_feature, test_feature, train_label, C=1e-3
 )
 json.dump(list(lasso_train.columns), open("../data/feature_columns(LASSO).json", "w"))
 #%%

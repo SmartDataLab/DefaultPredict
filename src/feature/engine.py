@@ -37,7 +37,8 @@ def lasso_feature(train_feature, test_feature, train_label, C):
         intercept_scaling=10000.0,
         C=C,
     )
-    coef = pd.Series(np.abs(model_lasso.coef_), index=train_feature.columns)
+    model_lasso.fit(train_feature, train_label)
+    coef = pd.Series(np.abs(model_lasso.coef_.ravel().copy()), index=train_feature.columns)
     feature_columns = list(coef[coef != 0].index)
     return train_feature[feature_columns], test_feature[feature_columns], model_lasso
 

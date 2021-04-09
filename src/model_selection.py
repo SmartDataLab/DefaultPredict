@@ -1,7 +1,8 @@
 #%%
 import numpy as np
 import pandas as pd
-
+import json
+from importlib import reload
 # import thirdparty
 
 #%%
@@ -58,7 +59,6 @@ interval_dict = json.load(open("../data/interval.json"))
 
 #%%
 # balance dataset testing
-key_feature = list(lasso_train.columns)
 for ratio in [0.2, 0.4, 0.5, 0.6, 0.8]:
     (
         feature_train_balance,
@@ -78,10 +78,7 @@ for ratio in [0.2, 0.4, 0.5, 0.6, 0.8]:
         label_test_balance, rf_pred_balance, "../figure", method="RF_balance_%s" % ratio
     )
 # %%
-key_feature = list(lasso_train.columns)
 
-best_feature_pred = lasso_pred
-plot_evaluation(test_label, best_feature_pred, "../figure", method="Logistic")
 
 #%%
 # Other classification models
@@ -297,7 +294,7 @@ predict_models = [
         verbose=0,
         warm_start=False,
     )
-    for _ in range(5)
+    for _ in range(20)
 ]
 cluster_predictor = ClusterPredictor(kmeans, predict_models)
 cluster_predictor.fit(
@@ -322,13 +319,13 @@ plot_evaluation(
 from models.CascadePredict import CascadePredictor
 
 CaP = CascadePredictor(
-    [RandomForestClassifier() for i in range(2)], lambda x: x < 0.5, 0.0
+    [RandomForestClassifier() for i in range(2)], lambda x: x < 0.7, 0.0
 )
 CaP.fit_list(
     [train_feature_2019, test_feature_2020.loc[glimse_index, :]],
     [train_label_2019, test_label_2020[glimse_index]],
 )
-cap_2020_pred = CaP.predict_proba(test_feature_2020.loc[test_index, :])
+cap_2020_pred = CaP.predict_proba(test_feature_2020.loc[test_index, :])[:,1]
 cap_2020_evaluation = evaluate(
     test_label_2020[test_index],
     cap_2020_pred,

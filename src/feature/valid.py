@@ -31,12 +31,16 @@ def evaluate(test_label, test_pred, threshold=0.5, save_path=None):
     cm = confusion_matrix(test_label, test_pred > threshold).tolist()
     tp = cm[1][1]
     fp = cm[0][1]
+    fn = cm[1][0]
+    tn = cm[0][0]
     res = {
         "R2": float(R2),
         "AUC": float(auc),
         "CM": cm,
         "TPR": tp / (tp + fp + 0.1),
         "FPR": fp / (tp + fp + 0.1),
+        "FNR": fn / (fn + tn + 0.1),
+        "TNR": fn / (fn + tn + 0.1),
     }
     if save_path:
         json.dump(res, open(save_path, "w"))
